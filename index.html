@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>InaZurvivors · Mudanza</title>
+  <style>
+    :root { color-scheme: dark; --bg: #050c22; --panel: #13254f; --edge: #5ad8ff; --gold: #ffe24a; --text: #fff; --soft: #b9c7e8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, sans-serif; display: flex; align-items: center; justify-content: center; padding: 16px; }
+    main { width: 100%; max-width: 560px; background: var(--panel); border: 2px solid var(--edge); border-radius: 16px; padding: 22px; }
+    h1 { margin: 0 0 6px; color: var(--gold); font-size: 24px; }
+    p { margin: 10px 0; color: var(--soft); }
+    .card { margin: 16px 0; padding: 14px; border-radius: 12px; background: #0d1b3a; border: 1px solid #2c4a8a; }
+    .card b { color: var(--text); }
+    button, a.btn { display: block; width: 100%; padding: 14px; border: 0; border-radius: 12px; background: var(--gold); color: #1a1a1a; font: 700 17px system-ui, sans-serif; text-align: center; text-decoration: none; cursor: pointer; }
+    button[disabled] { opacity: .6; cursor: wait; }
+    a { color: var(--gold); }
+    small { color: var(--soft); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>InaZurvivors se ha mudado</h1>
+  <p>El juego ahora está en <a href="https://inazurvivors.com/">inazurvivors.com</a>. Si jugabas como <b>invitado</b>, tu partida sigue guardada en este navegador, en la dirección antigua. Desde aquí te la llevas.</p>
+  <div id="estado" class="card">Buscando tu partida…</div>
+  <div id="accion"></div>
+  <p><small>Tu partida viaja dentro del enlace, directamente a inazurvivors.com: no pasa por ningún servidor. Si allí ya tienes otra partida, el juego te pregunta cuál usar y la otra se guarda como respaldo. Si usabas una cuenta de Google no necesitas esto: entra con Google en inazurvivors.com y tu progreso se carga de la nube. Disponible hasta el 13 de noviembre de 2026.</small></p>
+</main>
+<script>
+  // Destination fixed on purpose: no parameter can send the save anywhere else
+  var DESTINO = 'https://inazurvivors.com/';
+  var KEY = 'ie-survivors-save';
+  var estado = document.getElementById('estado');
+  var accion = document.getElementById('accion');
+  var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+
+  function leer() {
+    try {
+      var txt = localStorage.getItem(KEY) || localStorage.getItem(KEY + '.bak');
+      if (!txt) return null;
+      var s = JSON.parse(txt);
+      return s && typeof s === 'object' && s.owned ? { txt: txt, s: s } : null;
+    } catch (e) { return null; }
+  }
+
+  function b64url(bytes) {
+    var bin = '';
+    for (var i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  function empaquetar(txt) {
+    var raw = new TextEncoder().encode(txt);
+    if (typeof CompressionStream === 'undefined') return Promise.resolve('j' + b64url(raw));
+    var stream = new Blob([raw]).stream().pipeThrough(new CompressionStream('gzip'));
+    return new Response(stream).arrayBuffer().then(function (buf) { return 'g' + b64url(new Uint8Array(buf)); });
+  }
+
+  var found = leer();
+  if (!found) {
+    estado.innerHTML = '<b>No hay ninguna partida de invitado en este navegador.</b><br>Ábrela en el mismo navegador y dispositivo donde jugabas (no en una ventana de incógnito). Si jugabas con Google, entra con Google en inazurvivors.com.';
+    accion.innerHTML = '<a class="btn" href="' + DESTINO + '">Ir a inazurvivors.com</a>';
+  } else {
+    var s = found.s, st = s.stats || {};
+    var players = Object.keys(s.owned || {}).length;
+    estado.innerHTML = '<b>Partida encontrada' + (s.profile && s.profile.name ? ': ' + esc(s.profile.name) : '') + '</b><br>' +
+      players + ' futbolistas · ' + (st.wins || 0) + ' victorias · ' + (st.runs || 0) + ' partidas · ' + (s.coins || 0) + ' monedas · ' + (s.tokens || 0) + ' fichas';
+    accion.innerHTML = '<button id="llevar">Llevar mi partida a inazurvivors.com</button>';
+    document.getElementById('llevar').addEventListener('click', function (e) {
+      e.currentTarget.disabled = true;
+      e.currentTarget.textContent = 'Preparando…';
+      empaquetar(found.txt).then(function (p) { location.href = DESTINO + '#mudanza=' + p; })
+        .catch(function () { estado.innerHTML += '<br><b>No se pudo preparar la partida.</b> Prueba con otro navegador actualizado.'; });
+    });
+  }
+</script>
+</body>
+</html>
